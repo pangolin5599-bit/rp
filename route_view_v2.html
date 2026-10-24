@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ルートを見る</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%23000%22/%3E%3Ctext x=%2232%22 y=%2247%22 text-anchor=%22middle%22 font-family=%22Arial Black,Arial,Helvetica,sans-serif%22 font-weight=%22900%22 font-size=%2240%22 fill=%22%23fff%22%3E55%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--ink:#12262B;--mute:#5B6E70;--paper:#F2F4F1;--line:#D3DAD4;--teal:#17706A;--route:#D61F69;--warn:#B4561B}
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html,body{margin:0}
+  body{font-family:"Zen Kaku Gothic New",system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;color:var(--ink);background:var(--paper)}
+  .wrap{max-width:980px;margin:0 auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:14px}
+  h1{font-size:20px;margin:0;line-height:1.35;word-break:break-all}
+  .stats{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;font-variant-numeric:tabular-nums}
+  .dist{font-size:44px;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .dist u{text-decoration:none;font-size:18px;font-weight:500;color:var(--mute);margin-left:4px}
+  .st{font-size:13px;color:var(--mute)}
+  .st b{font-size:20px;color:var(--ink);margin:0 2px 0 4px}
+  .layers{display:inline-flex;align-self:flex-start;background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px}
+  .layers button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--mute);padding:6px 14px;border-radius:999px;cursor:pointer}
+  .layers button[aria-pressed="true"]{background:var(--ink);color:#fff;font-weight:700}
+  .layers button:focus-visible{outline:3px solid var(--teal);outline-offset:1px}
+  #map{height:clamp(320px,56vh,560px);border-radius:12px;border:1px solid var(--line);background:#dfe5e1}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px 8px}
+  .hover{font-size:12px;color:var(--mute);min-height:1.4em;font-variant-numeric:tabular-nums}
+  #chart{height:150px;touch-action:none;cursor:crosshair}
+  #chart svg{display:block;width:100%;height:100%}
+  .btn{font:inherit;font-size:15px;border:1px solid var(--teal);background:var(--teal);color:#fff;border-radius:8px;padding:12px 16px;cursor:pointer;font-weight:700}
+  .btn:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+  .stops{list-style:none;margin:0;padding:0}
+  .stops li{display:flex;gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px}
+  .stops i{flex:none;width:22px;height:22px;border-radius:50%;background:#C77700;color:#fff;font-style:normal;font-size:12px;font-weight:700;display:grid;place-items:center}
+  .stops small{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums}
+  .foot{font-size:12px;color:var(--mute);line-height:1.7;margin:0}
+  .err{background:#fff;border:1px solid var(--warn);border-radius:12px;padding:16px;font-size:14px;line-height:1.8}
+  .leaflet-container{font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="err" class="err" hidden></div>
+  <div id="app" hidden style="display:contents">
+    <header>
+      <h1 id="nm"></h1>
+      <div class="stats">
+        <span class="dist"><span id="dist">0</span><u>km</u></span>
+        <span class="st">獲得標高<b id="gain">—</b>m</span>
+        <span class="st">下降<b id="loss">—</b>m</span>
+      </div>
+    </header>
+    <div class="layers" role="group" aria-label="地図の種類">
+      <button type="button" data-l="pale" aria-pressed="true">淡色</button>
+      <button type="button" data-l="std" aria-pressed="false">標準</button>
+      <button type="button" data-l="photo" aria-pressed="false">航空写真</button>
+    </div>
+    <div id="map" role="application" aria-label="ルートの地図"></div>
+    <section class="card" aria-label="標高グラフ">
+      <div id="hover" class="hover">グラフをなぞると、その地点が地図に出ます。</div>
+      <div id="chart"></div>
+    </section>
+    <div><button id="gpx" class="btn" type="button">GPXをダウンロード</button></div>
+    <ul id="stops" class="stops" aria-label="立ち寄りポイント"></ul>
+    <p class="foot">地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>　このページは「ルートプランナー」で作ったルートを表示しています。</p>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  function fail(msg){ $('err').textContent = msg; $('err').hidden = false; $('app').hidden = true; }
+
+  /* ---------- 受け取ったデータを開く ---------- */
+  function unb64(s){
+    s = s.replace(/-/g,'+').replace(/_/g,'/');
+    while(s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function inflate(bytes){
+    var ds = new DecompressionStream('deflate-raw');
+    return new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+  }
+  function decodePoly(str){
+    var out = [], i = 0, la = 0, ln = 0;
+    function num(){
+      var r = 0, sh = 0, b;
+      do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while(b >= 0x20);
+      return (r & 1) ? ~(r >> 1) : (r >> 1);
+    }
+    while(i < str.length){ la += num(); ln += num(); out.push([la/1e5, ln/1e5]); }
+    return out;
+  }
+  function load(){
+    var h = location.hash.replace(/^#/, '');
+    var m = /^([zr])=(.+)$/.exec(h);
+    if(!m) return Promise.reject(new Error('empty'));
+    var bytes = unb64(m[2]);
+    var p = m[1] === 'z' ? inflate(bytes) : Promise.resolve(bytes.buffer);
+    return p.then(function(buf){ return JSON.parse(new TextDecoder().decode(new Uint8Array(buf))); });
+  }
+
+  /* ---------- 計算 ---------- */
+  function hav(a, b){
+    var R = 6371000, r = Math.PI/180;
+    var dLa = (b[0]-a[0])*r, dLn = (b[1]-a[1])*r;
+    var x = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLn/2)*Math.sin(dLn/2);
+    return 2*R*Math.asin(Math.sqrt(x));
+  }
+  function gainLoss(E){   // 3m未満の細かい上下は数えない（作成アプリと同じ考え方）
+    var TH = 3, gain = 0, loss = 0, ref = E[0];
+    for(var i=1;i<E.length;i++){
+      var d = E[i] - ref;
+      if(d >= TH){ gain += d; ref = E[i]; }
+      else if(d <= -TH){ loss -= d; ref = E[i]; }
+    }
+    return {gain:gain, loss:loss};
+  }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function svgEl(n, a){ var e = document.createElementNS('http://www.w3.org/2000/svg', n); for(var k in a) e.setAttribute(k, String(a[k])); return e; }
+
+  function show(data){
+    var P = decodePoly(data.p), E = [], i;
+    if(P.length < 2) throw new Error('short');
+    var cur = 0;
+    for(i=0;i<data.e.length;i++){ cur += data.e[i]; E.push(cur); }
+    if(E.length !== P.length) E = null;
+    var D = [0];
+    for(i=1;i<P.length;i++) D.push(D[i-1] + hav(P[i-1], P[i]));
+    var total = D[D.length-1] || 1;
+    var meta = data.m || {};
+    var gl = E ? gainLoss(E) : null;
+
+    var name = data.n || 'ルート';
+    document.title = name + '｜ルートを見る';
+    $('nm').textContent = name;
+    $('dist').textContent = ((meta.d || total)/1000).toFixed(1);
+    var g = meta.g != null ? meta.g : (gl && gl.gain), l = meta.l != null ? meta.l : (gl && gl.loss);
+    $('gain').textContent = g != null ? Math.round(g) : '—';
+    $('loss').textContent = l != null ? Math.round(l) : '—';
+
+    /* 地図 */
+    var map = L.map('map', {zoomControl:true});
+    var ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>';
+    var layers = {
+      pale:  L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {maxZoom:18, attribution:ATTR}),
+      std:   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {maxZoom:18, attribution:ATTR}),
+      photo: L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {maxZoom:18, attribution:ATTR})
+    };
+    var curLayer = 'pale';
+    try { var sv = localStorage.getItem('rv.layer'); if(sv && layers[sv]) curLayer = sv; } catch(e){}
+    layers[curLayer].addTo(map);
+    Array.prototype.forEach.call(document.querySelectorAll('.layers button'), function(b){
+      b.setAttribute('aria-pressed', b.getAttribute('data-l') === curLayer ? 'true' : 'false');
+      b.addEventListener('click', function(){
+        var k = b.getAttribute('data-l');
+        if(k === curLayer) return;
+        map.removeLayer(layers[curLayer]); layers[k].addTo(map); curLayer = k;
+        try { localStorage.setItem('rv.layer', k); } catch(e){}
+        Array.prototype.forEach.call(document.querySelectorAll('.layers button'), function(x){ x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      });
+    });
+    L.polyline(P, {color:'#fff', weight:9, opacity:.9, interactive:false}).addTo(map);   // 白の縁取り（写真や濃い地図でも見えるように）
+    var line = L.polyline(P, {color:'#D61F69', weight:5, opacity:1}).addTo(map);
+    L.circleMarker(P[0], {radius:9, color:'#fff', weight:3, fillColor:'#17706A', fillOpacity:1}).addTo(map).bindTooltip('スタート');
+    L.circleMarker(P[P.length-1], {radius:9, color:'#fff', weight:3, fillColor:'#12262B', fillOpacity:1}).addTo(map).bindTooltip('ゴール');
+    map.fitBounds(line.getBounds(), {padding:[24,24]});
+
+    /* 立ち寄り */
+    var stops = data.s || [], ul = $('stops');
+    stops.forEach(function(s, k){
+      L.circleMarker([s[0], s[1]], {radius:10, color:'#fff', weight:3, fillColor:'#C77700', fillOpacity:1}).addTo(map).bindTooltip(s[2] || '立ち寄り');
+      var bi = 0, bd = Infinity;
+      for(var j=0;j<P.length;j++){ var dd = hav([s[0], s[1]], P[j]); if(dd < bd){ bd = dd; bi = j; } }
+      var li = document.createElement('li');
+      li.innerHTML = '<i>' + (k+1) + '</i><span>' + esc(s[2] || '立ち寄り') + '</span><small>' + (D[bi]/1000).toFixed(1) + ' km地点</small>';
+      ul.appendChild(li);
+    });
+    if(!stops.length) ul.hidden = true;
+
+    /* 標高グラフ */
+    if(E){
+      var W = 600, H = 150, pl = 40, pr = W-10, pt = 10, pb = H-22;
+      var emin = Math.min.apply(null, E), emax = Math.max.apply(null, E);
+      var lo = Math.floor(emin/10)*10, hi = Math.ceil(emax/10)*10; if(hi-lo < 20) hi = lo+20;
+      var X = function(d){ return pl + d/total*(pr-pl); }, Y = function(e){ return pb - (e-lo)/(hi-lo)*(pb-pt); };
+      var svg = svgEl('svg', {viewBox:'0 0 '+W+' '+H, preserveAspectRatio:'none', role:'img', 'aria-label':'標高グラフ'});
+      [lo,(lo+hi)/2,hi].forEach(function(v){
+        svg.appendChild(svgEl('line', {x1:pl,x2:pr,y1:Y(v),y2:Y(v),stroke:'#D3DAD4','stroke-width':1}));
+        var t = svgEl('text', {x:pl-6,y:Y(v)+4,'text-anchor':'end','font-size':11,fill:'#5B6E70'}); t.textContent = Math.round(v); svg.appendChild(t);
+      });
+      var step = total > 60000 ? 20000 : total > 25000 ? 10000 : total > 10000 ? 5000 : 2000;
+      for(var d = 0; d <= total; d += step){
+        var tt = svgEl('text', {x:X(d),y:H-6,'text-anchor':'middle','font-size':11,fill:'#5B6E70'}); tt.textContent = (d/1000)+' km'; svg.appendChild(tt);
+      }
+      var path = '', k2;
+      for(k2=0;k2<P.length;k2++) path += (k2 ? 'L' : 'M') + X(D[k2]).toFixed(1) + ' ' + Y(E[k2]).toFixed(1);
+      svg.appendChild(svgEl('path', {d:path+'L'+X(total)+' '+pb+'L'+pl+' '+pb+'Z', fill:'rgba(23,112,106,.20)', stroke:'none'}));
+      svg.appendChild(svgEl('path', {d:path, fill:'none', stroke:'#17706A','stroke-width':2,'stroke-linejoin':'round'}));
+      var vl = svgEl('line', {x1:0,x2:0,y1:pt,y2:pb,stroke:'#12262B','stroke-width':1,visibility:'hidden'});
+      svg.appendChild(vl);
+      $('chart').appendChild(svg);
+      var hm = L.circleMarker(P[0], {radius:7, color:'#12262B', weight:3, fillColor:'#fff', fillOpacity:1, interactive:false});
+      var onMove = function(ev){
+        var r = svg.getBoundingClientRect(), x = (ev.clientX - r.left)/r.width*W;
+        var d = Math.max(0, Math.min(total, (x-pl)/(pr-pl)*total));
+        var lo2 = 0, hi2 = D.length-1;
+        while(lo2 < hi2){ var mid = (lo2+hi2)>>1; if(D[mid] < d) lo2 = mid+1; else hi2 = mid; }
+        var j = lo2, j0 = Math.max(0, j-1);
+        var t2 = D[j] > D[j0] ? (d-D[j0])/(D[j]-D[j0]) : 0;
+        var pos = [P[j0][0]+(P[j][0]-P[j0][0])*t2, P[j0][1]+(P[j][1]-P[j0][1])*t2];
+        var el = E[j0]+(E[j]-E[j0])*t2;
+        var a = Math.max(0, d-80), b = Math.min(total, d+80), ia = 0, ib = D.length-1, q;
+        for(q=0;q<D.length;q++){ if(D[q] >= a){ ia = q; break; } }
+        for(q=D.length-1;q>=0;q--){ if(D[q] <= b){ ib = q; break; } }
+        var gr = D[ib] > D[ia] ? (E[ib]-E[ia])/(D[ib]-D[ia])*100 : 0;
+        $('hover').textContent = (d/1000).toFixed(2) + ' km ・ 標高 ' + Math.round(el) + ' m ・ 勾配 ' + (gr>0?'+':'') + gr.toFixed(1) + '%';
+        var x2 = X(d); vl.setAttribute('x1', x2); vl.setAttribute('x2', x2); vl.setAttribute('visibility', 'visible');
+        hm.setLatLng(pos); if(!map.hasLayer(hm)) hm.addTo(map);
+      };
+      $('chart').addEventListener('pointermove', onMove);
+      $('chart').addEventListener('pointerdown', onMove);
+      $('chart').addEventListener('pointerleave', function(){ vl.setAttribute('visibility','hidden'); map.removeLayer(hm); });
+    } else {
+      $('chart').parentNode.hidden = true;
+    }
+
+    /* GPX */
+    $('gpx').addEventListener('click', function(){
+      var o = ['<?xml version="1.0" encoding="UTF-8"?>',
+        '<gpx version="1.1" creator="ルートプランナー" xmlns="http://www.topografix.com/GPX/1/1">',
+        '  <metadata><name>' + esc(name) + '</name></metadata>'];
+      stops.forEach(function(s){ o.push('  <wpt lat="' + s[0].toFixed(6) + '" lon="' + s[1].toFixed(6) + '"><name>' + esc(s[2] || '立ち寄り') + '</name></wpt>'); });
+      o.push('  <trk>', '    <name>' + esc(name) + '</name>', '    <trkseg>');
+      P.forEach(function(p, j){
+        var hd = '      <trkpt lat="' + p[0].toFixed(6) + '" lon="' + p[1].toFixed(6) + '"';
+        o.push(E ? hd + '><ele>' + E[j].toFixed(1) + '</ele></trkpt>' : hd + '/>');
+      });
+      o.push('    </trkseg>', '  </trk>', '</gpx>');
+      var blob = new Blob([o.join('\n') + '\n'], {type:'application/gpx+xml'});
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = name.replace(/[\\/:*?"<>|]/g, '_') + '.gpx';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    });
+  }
+
+  load().then(function(data){
+    if(!data || !data.p || !data.e) throw new Error('bad');
+    $('app').hidden = false;
+    show(data);
+  }).catch(function(e){
+    if(e && e.message === 'empty') fail('ルートのデータがありません。共有リンクを、最後まで開いてください。（リンクの途中で切れていると、開けません）');
+    else fail('ルートを開けませんでした。リンクが途中で切れているか、壊れている可能性があります。もう一度、送ってもらってください。');
+  });
+})();
+</script>
+</body>
+</html>
